@@ -1,0 +1,448 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>支出メモ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: one narrow column like a passbook page: month total on top, entry form, then ruled ledger lines. */
+:root {
+  --bg: #eef1f0;
+  --surface: #f9fbfa;
+  --fg: #16221f;
+  --muted: #5b6b67;
+  --rule: #cfd8d5;
+  --accent: #0e6a5a;
+  --accent-fg: #ffffff;
+  --accent-soft: #d6ebe5;
+  --ok: #1d7a4d;
+  --bad: #b3261e;
+  --bad-soft: #f6dcd9;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1816;
+    --surface: #17231f;
+    --fg: #e4ece9;
+    --muted: #93a5a0;
+    --rule: #2a3a36;
+    --accent: #5fc9b2;
+    --accent-fg: #07201a;
+    --accent-soft: #1c3b33;
+    --ok: #62d39b;
+    --bad: #ff8f86;
+    --bad-soft: #3a1f1d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1816;
+  --surface: #17231f;
+  --fg: #e4ece9;
+  --muted: #93a5a0;
+  --rule: #2a3a36;
+  --accent: #5fc9b2;
+  --accent-fg: #07201a;
+  --accent-soft: #1c3b33;
+  --ok: #62d39b;
+  --bad: #ff8f86;
+  --bad-soft: #3a1f1d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.04em; }
+.status {
+  font-size: 12px; padding: 3px 10px; border-radius: 99px;
+  background: var(--accent-soft); color: var(--ok); font-weight: 500;
+}
+.status.bad { background: var(--bad-soft); color: var(--bad); }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+.month { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.month .label { font-weight: 700; font-size: 16px; }
+.nav {
+  width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--rule);
+  background: var(--surface); color: var(--fg); font-size: 18px; cursor: pointer;
+}
+.total { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 16px; }
+.total small { color: var(--muted); font-size: 12px; letter-spacing: 0.08em; }
+.total .amount { font-size: 34px; font-weight: 600; line-height: 1.2; }
+.bars { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.bar-row { display: grid; grid-template-columns: 5.5em 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+.bar-track { height: 8px; background: var(--accent-soft); border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+.bar-row .v { color: var(--muted); font-size: 12px; }
+
+form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+form .full { grid-column: 1 / -1; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+input, select, textarea {
+  font: inherit; font-size: 16px; color: var(--fg); background: var(--surface);
+  border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; min-width: 0; width: 100%;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.primary {
+  font: inherit; font-weight: 700; font-size: 16px; padding: 12px; border-radius: 10px; border: 0;
+  background: var(--accent); color: var(--accent-fg); cursor: pointer; min-height: 48px;
+}
+.ghost {
+  font: inherit; font-size: 14px; padding: 10px 14px; border-radius: 10px; min-height: 44px;
+  border: 1px solid var(--rule); background: var(--surface); color: var(--fg); cursor: pointer;
+}
+.err { color: var(--bad); font-size: 13px; min-height: 1.2em; margin: 0; }
+
+.ledger-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ledger-head h2 { font-size: 14px; margin: 0; color: var(--muted); letter-spacing: 0.08em; font-weight: 500; }
+.sample-note { font-size: 12px; color: var(--muted); }
+ul.ledger { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; }
+ul.ledger li {
+  display: grid; grid-template-columns: 3.2em 1fr auto auto; gap: 10px; align-items: center;
+  padding: 10px 12px; border-bottom: 1px solid var(--rule);
+}
+ul.ledger li:last-child { border-bottom: 0; }
+.d { color: var(--muted); font-size: 12px; }
+.item-main { min-width: 0; }
+.item-main .cat { font-size: 12px; color: var(--accent); font-weight: 500; }
+.item-main .memo { overflow-wrap: anywhere; font-size: 14px; }
+.amt { font-weight: 500; }
+.del {
+  min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--muted);
+  border-radius: 10px; cursor: pointer; font: inherit; font-size: 12px;
+}
+.del.armed { background: var(--bad-soft); color: var(--bad); font-weight: 700; }
+.sample { opacity: 0.55; }
+.empty { padding: 20px 12px; color: var(--muted); text-align: center; }
+
+details { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 4px 14px; }
+summary { cursor: pointer; padding: 10px 0; min-height: 44px; font-weight: 500; }
+.backup { display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; }
+.backup p { margin: 0; font-size: 13px; color: var(--muted); }
+textarea { min-height: 96px; font-family: var(--font-num); font-size: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.msg { font-size: 13px; min-height: 1.2em; margin: 0; color: var(--ok); }
+.msg.bad { color: var(--bad); }
+@media (prefers-reduced-motion: no-preference) {
+  .bar-fill { transition: width .25s ease; }
+}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>支出メモ</h1>
+    <span id="status" class="status">確認中…</span>
+  </div>
+
+  <div class="month">
+    <button class="nav" id="prev" type="button" aria-label="前の月">◀</button>
+    <span class="label num" id="monthLabel"></span>
+    <button class="nav" id="next" type="button" aria-label="次の月">▶</button>
+  </div>
+
+  <section class="total" aria-label="月の合計">
+    <small>この月の支出</small>
+    <div class="amount num" id="total">¥0</div>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <form id="form" autocomplete="off">
+    <label>日付<input id="date" type="date" required></label>
+    <label>分類
+      <select id="cat">
+        <option>食費</option><option>日用品</option><option>交通</option>
+        <option>住居・光熱</option><option>交際</option><option>趣味</option><option>その他</option>
+      </select>
+    </label>
+    <label class="full">金額(円)<input id="amount" type="text" inputmode="numeric" placeholder="例 1280" required></label>
+    <label class="full">メモ(任意)<input id="memo" type="text" maxlength="60" placeholder="例 コンビニ昼食"></label>
+    <p class="err full" id="err" role="alert"></p>
+    <button class="primary full" type="submit">追加する</button>
+  </form>
+
+  <section>
+    <div class="ledger-head">
+      <h2>明細</h2>
+      <span class="sample-note" id="sampleNote" hidden>サンプル表示中。最初の1件を追加すると消えます</span>
+    </div>
+    <ul class="ledger" id="ledger"></ul>
+  </section>
+
+  <details>
+    <summary>バックアップと復元</summary>
+    <div class="backup">
+      <p>データはこの端末のブラウザ内だけに保存されます。機種変更やデータ削除に備えて、コピーしてメモアプリなどに保存してください。</p>
+      <div class="row">
+        <button class="ghost" id="copy" type="button">全データをコピー</button>
+      </div>
+      <label>復元する内容を貼り付け
+        <textarea id="paste" placeholder="コピーしたデータをここに貼り付け"></textarea>
+      </label>
+      <div class="row">
+        <button class="ghost" id="restore" type="button">取り込む(今のデータに追加)</button>
+      </div>
+      <p class="msg" id="backupMsg" role="status"></p>
+    </div>
+  </details>
+</div>
+
+<script>
+(function () {
+  var KEY = 'shishutsu-memo.v1';
+  var storageOK = false;
+  var items = [];
+  var month = '';
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  function yen(n) { return '¥' + Number(n).toLocaleString('ja-JP'); }
+
+  function probe() {
+    try {
+      localStorage.setItem('__probe', '1');
+      var ok = localStorage.getItem('__probe') === '1';
+      localStorage.removeItem('__probe');
+      return ok;
+    } catch (e) { return false; }
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.filter(valid) : [];
+    } catch (e) { return []; }
+  }
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(items));
+      return localStorage.getItem(KEY) !== null;
+    } catch (e) { return false; }
+  }
+  function valid(x) {
+    return x && typeof x === 'object' && typeof x.id === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(x.date) && typeof x.amount === 'number' && isFinite(x.amount) && x.amount >= 0 &&
+      typeof x.cat === 'string';
+  }
+
+  function sampleItems() {
+    var m = month;
+    return [
+      { id: 's1', date: m + '-03', cat: '食費', amount: 780, memo: 'コンビニ昼食(例)', sample: true },
+      { id: 's2', date: m + '-05', cat: '交通', amount: 1240, memo: 'バス定期の継ぎ足し(例)', sample: true },
+      { id: 's3', date: m + '-08', cat: '日用品', amount: 2150, memo: 'ドラッグストア(例)', sample: true }
+    ];
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function setStatus() {
+    var el = $('status');
+    if (storageOK) {
+      el.textContent = '端末内に保存中';
+      el.className = 'status';
+    } else {
+      el.textContent = '保存できません(閉じると消えます)';
+      el.className = 'status bad';
+    }
+  }
+
+  function monthItems() {
+    return items.filter(function (x) { return x.date.slice(0, 7) === month; });
+  }
+
+  function render() {
+    var parts = month.split('-');
+    $('monthLabel').textContent = parts[0] + '年' + Number(parts[1]) + '月';
+
+    var real = monthItems();
+    var showSample = items.length === 0;
+    var list = showSample ? sampleItems() : real;
+    $('sampleNote').hidden = !showSample;
+
+    list = list.slice().sort(function (a, b) {
+      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+    });
+
+    var total = 0, byCat = {};
+    list.forEach(function (x) {
+      total += x.amount;
+      byCat[x.cat] = (byCat[x.cat] || 0) + x.amount;
+    });
+    $('total').textContent = yen(total);
+
+    var bars = $('bars');
+    bars.textContent = '';
+    Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; }).forEach(function (c) {
+      var row = document.createElement('div');
+      row.className = 'bar-row';
+      var name = document.createElement('span'); name.textContent = c;
+      var track = document.createElement('span'); track.className = 'bar-track';
+      var fill = document.createElement('span'); fill.className = 'bar-fill';
+      fill.style.display = 'block';
+      fill.style.width = (total ? Math.round(byCat[c] / total * 100) : 0) + '%';
+      track.appendChild(fill);
+      var v = document.createElement('span'); v.className = 'v num'; v.textContent = yen(byCat[c]);
+      row.appendChild(name); row.appendChild(track); row.appendChild(v);
+      bars.appendChild(row);
+    });
+
+    var ul = $('ledger');
+    ul.textContent = '';
+    if (!list.length) {
+      var e = document.createElement('li');
+      e.className = 'empty';
+      e.style.display = 'block';
+      e.textContent = 'この月の記録はまだありません。上のフォームから追加できます。';
+      ul.appendChild(e);
+      return;
+    }
+    list.forEach(function (x) {
+      var li = document.createElement('li');
+      if (x.sample) li.className = 'sample';
+      var d = document.createElement('span'); d.className = 'd num';
+      d.textContent = x.date.slice(5).replace('-', '/');
+      var main = document.createElement('div'); main.className = 'item-main';
+      var cat = document.createElement('div'); cat.className = 'cat'; cat.textContent = x.cat;
+      main.appendChild(cat);
+      if (x.memo) {
+        var memo = document.createElement('div'); memo.className = 'memo'; memo.textContent = x.memo;
+        main.appendChild(memo);
+      }
+      var amt = document.createElement('span'); amt.className = 'amt num'; amt.textContent = yen(x.amount);
+      var del = document.createElement('button');
+      del.type = 'button'; del.className = 'del'; del.textContent = '削除';
+      del.setAttribute('aria-label', x.date + ' ' + x.cat + ' ' + yen(x.amount) + ' を削除');
+      if (x.sample) { del.disabled = true; del.style.visibility = 'hidden'; }
+      else {
+        var timer = null;
+        del.addEventListener('click', function () {
+          if (del.classList.contains('armed')) {
+            clearTimeout(timer);
+            items = items.filter(function (y) { return y.id !== x.id; });
+            storageOK = save() && storageOK;
+            setStatus();
+            render();
+          } else {
+            del.classList.add('armed');
+            del.textContent = '本当に?';
+            timer = setTimeout(function () {
+              del.classList.remove('armed');
+              del.textContent = '削除';
+            }, 3000);
+          }
+        });
+      }
+      li.appendChild(d); li.appendChild(main); li.appendChild(amt); li.appendChild(del);
+      ul.appendChild(li);
+    });
+  }
+
+  function shiftMonth(delta) {
+    var p = month.split('-');
+    var d = new Date(Number(p[0]), Number(p[1]) - 1 + delta, 1);
+    month = d.getFullYear() + '-' + pad(d.getMonth() + 1);
+    render();
+  }
+
+  $('prev').addEventListener('click', function () { shiftMonth(-1); });
+  $('next').addEventListener('click', function () { shiftMonth(1); });
+
+  $('form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var err = $('err');
+    err.textContent = '';
+    var date = $('date').value;
+    var raw = $('amount').value.replace(/[,，¥円\s]/g, '').replace(/[０-９]/g, function (c) {
+      return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+    });
+    var amount = Number(raw);
+    if (!date) { err.textContent = '日付を入力してください。'; return; }
+    if (!raw || !/^\d+$/.test(raw) || amount <= 0) { err.textContent = '金額は1以上の数字で入力してください。'; return; }
+    if (amount > 99999999) { err.textContent = '金額が大きすぎます。'; return; }
+    var item = {
+      id: String(Date.now()) + Math.random().toString(36).slice(2, 7),
+      date: date, cat: $('cat').value, amount: amount, memo: $('memo').value.trim()
+    };
+    items.push(item);
+    var ok = save();
+    storageOK = ok;
+    setStatus();
+    if (!ok) err.textContent = 'この環境では保存できませんでした。バックアップでコピーして残してください。';
+    month = date.slice(0, 7);
+    $('amount').value = '';
+    $('memo').value = '';
+    render();
+  });
+
+  function setMsg(text, bad) {
+    var m = $('backupMsg');
+    m.textContent = text;
+    m.className = bad ? 'msg bad' : 'msg';
+  }
+
+  $('copy').addEventListener('click', function () {
+    var json = JSON.stringify({ app: 'shishutsu-memo', version: 1, items: items });
+    var ta = $('paste');
+    function fallback() {
+      ta.value = json;
+      ta.focus();
+      ta.select();
+      setMsg('自動コピーできませんでした。下の欄を長押ししてコピーしてください。', true);
+    }
+    if (!items.length) { setMsg('コピーするデータがまだありません。', true); return; }
+    try {
+      navigator.clipboard.writeText(json).then(function () {
+        setMsg(items.length + '件をコピーしました。メモアプリなどに貼り付けて保管してください。', false);
+      }, fallback);
+    } catch (e) { fallback(); }
+  });
+
+  $('restore').addEventListener('click', function () {
+    var text = $('paste').value.trim();
+    if (!text) { setMsg('貼り付け欄が空です。', true); return; }
+    var data;
+    try { data = JSON.parse(text); } catch (e) { setMsg('データを読み取れませんでした。コピーした内容をそのまま貼り付けてください。', true); return; }
+    var arr = data && Array.isArray(data.items) ? data.items : null;
+    if (!arr) { setMsg('このアプリのバックアップではありません。', true); return; }
+    var have = {};
+    items.forEach(function (x) { have[x.id] = true; });
+    var added = 0;
+    arr.forEach(function (x) {
+      if (valid(x) && !have[x.id]) {
+        items.push({ id: x.id, date: x.date, cat: x.cat, amount: x.amount, memo: typeof x.memo === 'string' ? x.memo : '' });
+        have[x.id] = true;
+        added++;
+      }
+    });
+    storageOK = save();
+    setStatus();
+    setMsg(added + '件を取り込みました。', false);
+    $('paste').value = '';
+    render();
+  });
+
+  storageOK = probe();
+  items = storageOK ? load() : [];
+  month = todayStr().slice(0, 7);
+  $('date').value = todayStr();
+  setStatus();
+  render();
+})();
+</script>
+
+</body></html>
